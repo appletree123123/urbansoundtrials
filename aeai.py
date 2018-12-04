@@ -36,11 +36,13 @@ class ConvNet(nn.Module):
         
         self.conv3 = torch.nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1)
         self.pool3 = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
-        self.conv3_drop = nn.Dropout2d(0.5)
+        #self.conv3_drop = nn.Dropout2d(0.5)
 
 
-        self.fc1 = torch.nn.Linear(28800, 64)
-        self.fc2 = torch.nn.Linear(64, 1)
+        self.fc1 = torch.nn.Linear(12800, 2048)
+        self.fc2 = torch.nn.Linear(2048, 1024)
+        self.fc3 = torch.nn.Linear(1024,128)
+        self.fc4 = torch.nn.Linear(128,8)
         torch.nn.init.xavier_uniform(self.conv1.weight) #initialize weights
         torch.nn.init.xavier_uniform(self.conv2.weight)
         torch.nn.init.xavier_uniform(self.conv3.weight)
@@ -59,11 +61,14 @@ class ConvNet(nn.Module):
         x = self.pool3(x)
         #print('Conv3 layer: X shape:',x.shape)    
         x = F.dropout(x, training=self.training)
-        x = x.view(1, 28800)  #Rectify 
+        #x = x.view(1, 16384)  #Rectify but you need to rectify to minibatch size poluebok
+        x = x.view(x.size(0),-1) 
         x = F.relu(self.fc1(x))
-        x = self.fc2(x)
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
+        x = self.fc4(x)
     
-        return F.sigmoid(x)
+        return F.softmax(x)
 
 
 
@@ -72,6 +77,7 @@ class DataSetAir(Dataset):
     
     def __init__(self, root_dir,transform): #download,read,transform the data
         self.root_dir = root_dir
+        #self.class_list = ('air_conditioner','children_playing','dog_bark','drilling','engine_idling','jackhammer','siren','street_music')
         self.class_list = ('air_conditioner','engine_idling')
         self.transform = transform
 
@@ -87,28 +93,27 @@ class DataSetAir(Dataset):
             wav_file = filepath + '/' + self.class_list[folder_number] + '.'  + str(file_number+1).zfill(4) + '_.wav'
         
         
-        label = torch.FloatTensor(1,1)
-        
-        if (self.class_list[folder_number] == self.class_list[0]):
-            label[0,0] = 1
-        if (self.class_list[folder_number] == self.class_list[1]):
-            label[0,0] = 0
-        
+        #It was Float tensor before!
+        #label = torch.LongTensor(1,8) #Created a label tensor
+        #label = label.new_zeros(1,8) #made it zero
+        label = torch.LongTensor(1)        
+       
+        label[0] = folder_number  #Class scores should also be in a range of 0..1
         #print(wav_file)
         #print('File#',file_number,'Folder:',folder_number) #For debug purposes
         #Feature extraction goes here:
         wav = wavio.read(wav_file)
         sample = mfcc(wav.data,wav.rate,nfft=2048) 
-        sample = np.pad(sample, [(0, 1800-sample.shape[0]), (0, 0)], 'constant') #All of the samples are different length, append with 0
+        sample = np.pad(sample, [(0, 800-sample.shape[0]), (0, 0)], 'constant') #All of the samples are different length, append with 0
         sample = torch.from_numpy(sample)
         sample = sample / sample.sum(0).expand_as(sample)  #normalize to range of 0:1
-        sample = sample.unsqueeze(0) #Adding an empty access because we don't work with images and there are no channels
-        return sample, label 
+        sample = sample.unsqueeze(0) #Adding an empty axis because we don't work with images and there are no channels
+        return sample, folder_number 
 
 
     def __len__(self): #return data length 
 
-        return 899
+        return 120 #899
 
 
 class DataSetAir_test(Dataset):
@@ -116,7 +121,7 @@ class DataSetAir_test(Dataset):
     
     def __init__(self, root_dir,transform): #download,read,transform the data
         self.root_dir = root_dir
-        self.class_list = ('air_conditioner','engine_idling')
+        self.class_list = ('air_conditioner','children_playing','dog_bark','drilling','engine_idling','jackhammer','siren','street_music')
         self.transform = transform
 
     def __getitem__(self, index):
@@ -127,23 +132,21 @@ class DataSetAir_test(Dataset):
             wav_file = filepath + '/' + self.class_list[folder_number] + '.' +  str(file_number+1).zfill(4) + '_.wav'
         
         
-        label = torch.FloatTensor(1,1)
-        
-        if (self.class_list[folder_number] == self.class_list[0]):
-            label[0,0] = 1
-        if (self.class_list[folder_number] == self.class_list[1]):
-            label[0,0] = 0
-        
-        #print('Got file:', img, 'with label:',label)
+        label = torch.FloatTensor(1,8) #Created a label tensor
+        label = label.new_zeros(1,8) #made it zero
+        label[0,folder_number] = 1 #Put 1 in a correct coistion according to the class name
+   
+        print('Got file:', wav_file, 'with label:',label)
         #print('File#',file_number,'Folder:',folder_number) #For debug purposes
 
         wav = wavio.read(wav_file)
         sample = mfcc(wav.data,wav.rate,nfft=2048) 
-        sample = np.pad(sample, [(0, 1800-sample.shape[0]), (0, 0)], 'constant')
-        sample = np.expand_dims(sample,axis=0)
-        sample = torch.from_numpy(sample)
+        sample = np.pad(sample, [(0, 1600-sample.shape[0]), (0, 0)], 'constant') #All of the samples are different length, append with 0
+        sample = torch.from_numpy(sample) #Make it to torch
+        #sample = sample / sample.sum(0).expand_as(sample)  #normalize to range of 0:1
+        sample = sample.unsqueeze(0) #Adding an empty access because we don't work with images and there are no channels
         return sample, label 
-        
+      
     def __len__(self): #return data length 
 
         return 92
@@ -160,28 +163,31 @@ def main():
     train_transformer = transforms.ToTensor()  
 
     db = DataSetAir('audio',train_transformer) #initiate DataBase
-    train_loader = DataLoader(dataset = db, shuffle=True,num_workers=2)
+    train_loader = DataLoader(dataset = db, batch_size =4, shuffle=True, num_workers=2)
 
     cnn = ConvNet() #Create the instanse of net 
     cnn = cnn.cuda()
 
 
-    criterion = torch.nn.BCELoss().cuda() #Cross Entropy Loss
-    optimizer = optim.Adam(cnn.parameters(), lr=0.001) #Optimizer with learning rate 0.001
+    criterion = torch.nn.CrossEntropyLoss().cuda() #tried Cross Entropy Loss
+    #optimizer = optim.Adam(cnn.parameters(), lr=0.001) #Optimizer with learning rate 0.001
+    optimizer = optim.SGD(cnn.parameters(), lr = 0.001, momentum=0.9)
     running_loss = 0 
     total_train_loss = 0
-    for epoch in range(32):  #32 it was
+    for epoch in range(64):  #32 it was
         running_loss = 0
-        for i, data in enumerate(train_loader, 1):
-            inputs, labels = data
-            inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(dtype))
-
+        for inputs, labels in train_loader:
+            #inputs, labels = data
+            inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(torch.cuda.LongTensor))
             optimizer.zero_grad()             #Set the parameter gradients to zero
             outputs = cnn(inputs)
-            if(outputs.unsqueeze(0) < 0):
-                raise NotImplementedError
+            #print('Inputs.shape:',inputs.size())
             #print('Current output: ', outputs.unsqueeze(0), 'Target output:', labels)
-            loss_size = criterion(outputs.unsqueeze(0), labels) #unsqueeze!!!!
+            #print('Outputs:',outputs)
+            #print('Labels:',labels)
+            #print('Outputs.shape',outputs.size())
+            #print('Labels.shape',labels.size())
+            loss_size = criterion(outputs, labels) 
             #print('Loss size',loss_size,'Running loss:', running_loss)
             loss_size.backward()
             optimizer.step()   
@@ -199,8 +205,7 @@ def main():
     db_test = DataSetAir_test('test', train_transformer)
     test_loader = DataLoader(dataset = db_test, shuffle=True,num_workers=2)
     n_errors = 0
-    error_class_1 = 0
-    error_class_0 = 0
+
     error_size = 0
     for i,data in enumerate(test_loader,0):
             inputs, labels = data
@@ -209,16 +214,11 @@ def main():
             #print('Processing file#',i)
             #print('Output: ', outputs.unsqueeze(0), 'Ground truth:', labels)
             #print('----------')
-            error_size = labels - outputs.unsqueeze(0)
+            #error_size = labels - outputs.unsqueeze(0)
             #print('Error size',torch.abs(error_size))
-            #print('----------')            
-            if (labels == 1 and torch.abs(error_size) > 0.4): #class 1 - cats
-                error_class_1 = error_class_1 + 1
-            if (labels == 0 and torch.abs(error_size) > 0.4):
-                error_class_0 = error_class_0 + 1
-            if (torch.abs(error_size) > 0.4):
-                n_errors = n_errors + 1
-    print('Errors in class 1, engine:', error_class_1,'Errors in class 0, aircond:',error_class_0)
+            #print('----------')    
+            hamming_score = 1 - (labels != outputs).sum() / float(labels.nelement())        
+            
     print('Total amount of errors:',n_errors)
     print('Last cycle loss was:', running_loss)
             
