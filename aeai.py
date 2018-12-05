@@ -13,18 +13,12 @@ import torch.optim as optim
 from torchvision import transforms
 import wavio
 from torch.autograd import Variable
-from skimage import io#, transform
 
-#https://drive.google.com/drive/folders/1XaFM8BJFligrqeQdE-_5Id0V_SubJAZe?usp=sharing
 from torch.utils.data.sampler import SubsetRandomSampler
 
 
 class ConvNet(nn.Module):
 
-    #Classifying RGB images, therefore number of input channels = 3
-    #We want to apply 32 feature detectors (filters), so out channels is 32
-    #3x3 filter moves 1 pixel at a time
-    #ReLU" all negative values become 0, all positive values remain
 
 
     def __init__(self):
@@ -100,8 +94,8 @@ class DataSetAir(Dataset):
     
     def __init__(self, root_dir,transform): #download,read,transform the data
         self.root_dir = root_dir
-        self.class_list = ('air_conditioner','children_playing','dog_bark','drilling','engine_idling','jackhammer','siren','street_music')
-        #self.class_list = ('air_conditioner','engine_idling','drilling')
+        #self.class_list = ('air_conditioner','children_playing','dog_bark','drilling','engine_idling','jackhammer','siren','street_music')
+        self.class_list = ('air_conditioner','engine_idling','drilling')
         self.transform = transform
 
     def __getitem__(self, index): #superfast 0(1) method, return item by index
@@ -137,7 +131,7 @@ class DataSetAir(Dataset):
 
     def __len__(self): #return data length 
 
-        return 820 #899
+        return 32 #899
 
 
 class DataSetAir_test(Dataset):
@@ -145,7 +139,8 @@ class DataSetAir_test(Dataset):
     
     def __init__(self, root_dir,transform): #download,read,transform the data
         self.root_dir = root_dir
-        self.class_list = ('air_conditioner','children_playing','dog_bark','drilling','engine_idling','jackhammer','siren','street_music')
+        #self.class_list = ('air_conditioner','children_playing','dog_bark','drilling','engine_idling','jackhammer','siren','street_music')
+        self.class_list = ('air_conditioner','engine_idling','drilling')
         self.transform = transform
 
     def __getitem__(self, index):
@@ -156,21 +151,19 @@ class DataSetAir_test(Dataset):
             wav_file = filepath + '/' + self.class_list[folder_number] + '.' +  str(file_number+1).zfill(4) + '_.wav'
         
         
-        label = torch.FloatTensor(1,8) #Created a label tensor
-        label = label.new_zeros(1,8) #made it zero
-        label[0,folder_number] = 1 #Put 1 in a correct coistion according to the class name
-   
-        print('Got file:', wav_file, 'with label:',label)
-        #print('File#',file_number,'Folder:',folder_number) #For debug purposes
-
+        label = folder_number
         wav = wavio.read(wav_file)
-        sample = mfcc(wav.data,wav.rate,nfft=2048) 
-        sample = np.pad(sample, [(0, 1600-sample.shape[0]), (0, 0)], 'constant') #All of the samples are different length, append with 0
-        sample = torch.from_numpy(sample) #Make it to torch
-        #sample = sample / sample.sum(0).expand_as(sample)  #normalize to range of 0:1
-        sample = sample.unsqueeze(0) #Adding an empty access because we don't work with images and there are no channels
-        return sample, label 
-      
+        mfcc_cf = mfcc(wav.data,wav.rate,winlen=0.072,numcep=26,nfft=4000) 
+        d_mfcc = delta(mfcc_cf,2)  #calculate delta mfcc
+        dd_mfcc = delta(d_mfcc,2)
+        sample = np.concatenate((mfcc_cf,d_mfcc),axis=1) #append delta to regular mfcc  
+        sample = np.concatenate((sample,dd_mfcc),axis=1) #delta-delta
+        sample = np.pad(sample, [(0, 800-sample.shape[0]), (0, 0)], 'constant') #All of the samples are different length, append with 0
+        sample = torch.from_numpy(sample)
+        sample = sample / sample.sum(0).expand_as(sample)  #normalize to range of 0:1
+        sample = sample.unsqueeze(0) #Adding an empty axis because we don't work with images and there are no channels
+        return sample, label
+     
     def __len__(self): #return data length 
 
         return 92
@@ -198,26 +191,18 @@ def main():
     optimizer = optim.SGD(cnn.parameters(), lr = 0.005, momentum=0.9)
     running_loss = 0 
     total_train_loss = 0
-    for epoch in range(256):  #32 it was
+    for epoch in range(1):  #32 it was
         running_loss = 0
         for inputs, labels in train_loader:
-            #inputs, labels = data
             inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(torch.cuda.LongTensor))
             optimizer.zero_grad()             #Set the parameter gradients to zero
             outputs = cnn(inputs)
-            #print('Inputs.shape:',inputs.size())
-            #print('Current output: ', outputs.unsqueeze(0), 'Target output:', labels)
-            #print('Outputs:',outputs)
-            #print('Labels:',labels)
-            #print('Outputs.shape',outputs.size())
-            #print('Labels.shape',labels.size())
             loss_size = criterion(outputs, labels) 
-            #print('Loss size',loss_size,'Running loss:', running_loss)
             loss_size.backward()
             optimizer.step()   
             running_loss += loss_size.data[0]
-        print('Running loss on previous cycle was:',running_loss)
-        print('starting Epoch #',epoch)
+        print('Running loss was:',running_loss)
+        print('Finishing Epoch #',epoch)
         total_train_loss += loss_size.data[0]
          
 
@@ -233,15 +218,17 @@ def main():
     error_size = 0
     for i,data in enumerate(test_loader,0):
             inputs, labels = data
-            inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(dtype))
+            inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(torch.cuda.LongTensor))
             outputs = cnn(inputs)
-            #print('Processing file#',i)
-            #print('Output: ', outputs.unsqueeze(0), 'Ground truth:', labels)
+            print('Processing file#',i)
+            print('Outputs=',outputs)
+            value,index = torch.max(outputs,1)
+            print('Output: ', value,'-',index, 'Ground truth:', labels)
+            #if (outputs)
             #print('----------')
             #error_size = labels - outputs.unsqueeze(0)
             #print('Error size',torch.abs(error_size))
             #print('----------')    
-            hamming_score = 1 - (labels != outputs).sum() / float(labels.nelement())        
             
     print('Total amount of errors:',n_errors)
     print('Last cycle loss was:', running_loss)
@@ -257,8 +244,5 @@ def main():
 
 if __name__ == "__main__":
    main()
-
-
-
 
 
