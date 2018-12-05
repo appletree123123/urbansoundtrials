@@ -64,7 +64,9 @@ class ConvNet(nn.Module):
     def forward(self, x):
         #print('Begin forward pass, x shape:', x.shape)
         x = F.relu(self.conv1(x.cuda()))
+        #print('First convolution complete, x.shape',x.shape)
         x = self.pool1(x)
+        #print('First pooling complete,x.shape:',x.shape)
         x = F.relu(self.conv2(x.cuda()))
         x = self.pool2(x)
         #print('Shape before recitfying',x.shape)
@@ -185,7 +187,7 @@ def main():
     train_transformer = transforms.ToTensor()  
 
     db = DataSetAir('audio',train_transformer) #initiate DataBase
-    train_loader = DataLoader(dataset = db, batch_size =4, shuffle=True, num_workers=2)
+    train_loader = DataLoader(dataset = db, batch_size =32, shuffle=True, num_workers=2)
 
     cnn = ConvNet() #Create the instanse of net 
     cnn = cnn.cuda()
@@ -193,7 +195,7 @@ def main():
 
     criterion = torch.nn.CrossEntropyLoss().cuda() #tried Cross Entropy Loss
     #optimizer = optim.Adam(cnn.parameters(), lr=0.001) #Optimizer with learning rate 0.001
-    optimizer = optim.SGD(cnn.parameters(), lr = 0.01, momentum=0.9)
+    optimizer = optim.SGD(cnn.parameters(), lr = 0.005, momentum=0.9)
     running_loss = 0 
     total_train_loss = 0
     for epoch in range(256):  #32 it was
