@@ -27,33 +27,16 @@ class ConvNet(nn.Module):
         self.pool1 = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
         #self.conv12_drop = nn.Dropout2d(0.25)
 
-        self.conv2 = torch.nn.Conv2d(in_channels=80, out_channels=80, kernel_size=3, stride=3, padding=1)
-        #self.conv4 = torch.nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=3, padding=1)
+        self.conv2 = torch.nn.Conv2d(in_channels=80, out_channels=160, kernel_size=3, stride=3, padding=1)
+
         self.pool2 = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
-        #self.conv34_drop = nn.Dropout2d(0.25)
 
-        #self.conv5 = torch.nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=3, padding=1)
-        #self.conv6 = torch.nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=3, padding=1)
-        #self.pool56 = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
-        #self.conv56_drop = nn.Dropout2d(0.25)
-
-        #self.conv7 = torch.nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=3, padding=1)
-        #self.conv8 = torch.nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=3, padding=1)
-        #self.pool78 = torch.nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
-        #self.conv78_drop = nn.Dropout2d(0.25)
-
-        self.fc1 = torch.nn.Linear(7920, 2048)
-        #self.fc1_drop = nn.Dropout2d(0.25)
-        self.fc2 = torch.nn.Linear(2048,1024)
-        self.fc3 = torch.nn.Linear(1024,8)
+        self.fc1 = torch.nn.Linear(7920*2, 4096)
+        self.fc2 = torch.nn.Linear(4096,2048)
+        self.fc3 = torch.nn.Linear(2048,4)
         torch.nn.init.xavier_uniform(self.conv1.weight) #initialize weights
         torch.nn.init.xavier_uniform(self.conv2.weight)
-        #torch.nn.init.xavier_uniform(self.conv3.weight)
-        #torch.nn.init.xavier_uniform(self.conv4.weight)
-        #torch.nn.init.xavier_uniform(self.conv5.weight)        
-        #torch.nn.init.xavier_uniform(self.conv6.weight)
-        #torch.nn.init.xavier_uniform(self.conv7.weight)
-        #torch.nn.init.xavier_uniform(self.conv8.weight)
+
 
     def forward(self, x):
         #print('Begin forward pass, x shape:', x.shape)
@@ -63,18 +46,6 @@ class ConvNet(nn.Module):
         #print('First pooling complete,x.shape:',x.shape)
         x = F.relu(self.conv2(x.cuda()))
         x = self.pool2(x)
-        #print('Shape before recitfying',x.shape)
-        #print('Conv1-2 complete,x shape after pooling',x.shape)
-        #x = F.relu(self.conv3(x.cuda()))
-        #x = F.relu(self.conv4(x.cuda()))
-        #print('Conv3-4 complete,x shape',x.shape)
-        #x = self.pool34(x)
-        #x = F.relu(self.conv5(x.cuda()))
-        #x = F.relu(self.conv6(x.cuda()))
-        #x = self.pool56(x)
-        #x = F.relu(self.conv7(x.cuda()))
-        #x = F.relu(self.conv8(x.cuda()))
-        #x = self.pool78(x)
 
         x = x.view(x.size(0),-1) 
         #print('Shape after rectifying',x.shape)
@@ -95,24 +66,17 @@ class DataSetAir(Dataset):
     def __init__(self, root_dir,transform): #download,read,transform the data
         self.root_dir = root_dir
         #self.class_list = ('air_conditioner','children_playing','dog_bark','drilling','engine_idling','jackhammer','siren','street_music')
-        self.class_list = ('air_conditioner','engine_idling','drilling')
+        self.class_list = ('air_conditioner','children_playing','jackhammer','street_music')
         self.transform = transform
 
-    def __getitem__(self, index): #superfast 0(1) method, return item by index
-        #Goes into the folder with the database
-        #According to the class list specified in the constructor goes into every folder 
-        #and loads all the images in the folder. The line "img ="
-        #varies to every database
+    def __getitem__(self, index): 
         file_number = int(index / len(self.class_list))
         folder_number = index % len(self.class_list)
         class_folder = os.path.join(self.root_dir, self.class_list[folder_number])
         for filepath in glob.iglob(class_folder):
             wav_file = filepath + '/' + self.class_list[folder_number] + '.'  + str(file_number+1).zfill(4) + '_.wav'
-        
-        
-              
-       
-        label = folder_number  #Class scores should also be in a range of 0..1
+
+        label = folder_number  
         #print(wav_file)
         #print('File#',file_number,'Folder:',folder_number) #For debug purposes
         #Feature extraction goes here:
@@ -131,7 +95,7 @@ class DataSetAir(Dataset):
 
     def __len__(self): #return data length 
 
-        return 32 #899
+        return 890*len(self.class_list) #899
 
 
 class DataSetAir_test(Dataset):
@@ -140,7 +104,7 @@ class DataSetAir_test(Dataset):
     def __init__(self, root_dir,transform): #download,read,transform the data
         self.root_dir = root_dir
         #self.class_list = ('air_conditioner','children_playing','dog_bark','drilling','engine_idling','jackhammer','siren','street_music')
-        self.class_list = ('air_conditioner','engine_idling','drilling')
+        self.class_list = ('air_conditioner','children_playing','jackhammer','street_music')
         self.transform = transform
 
     def __getitem__(self, index):
@@ -180,7 +144,7 @@ def main():
     train_transformer = transforms.ToTensor()  
 
     db = DataSetAir('audio',train_transformer) #initiate DataBase
-    train_loader = DataLoader(dataset = db, batch_size =32, shuffle=True, num_workers=2)
+    train_loader = DataLoader(dataset = db, batch_size =64, shuffle=True, num_workers=2)
 
     cnn = ConvNet() #Create the instanse of net 
     cnn = cnn.cuda()
@@ -188,10 +152,10 @@ def main():
 
     criterion = torch.nn.CrossEntropyLoss().cuda() #tried Cross Entropy Loss
     #optimizer = optim.Adam(cnn.parameters(), lr=0.001) #Optimizer with learning rate 0.001
-    optimizer = optim.SGD(cnn.parameters(), lr = 0.005, momentum=0.9)
+    optimizer = optim.SGD(cnn.parameters(), lr = 0.01, momentum=0.9)
     running_loss = 0 
     total_train_loss = 0
-    for epoch in range(1):  #32 it was
+    for epoch in range(32):  #32 it was
         running_loss = 0
         for inputs, labels in train_loader:
             inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(torch.cuda.LongTensor))
@@ -214,26 +178,20 @@ def main():
     db_test = DataSetAir_test('test', train_transformer)
     test_loader = DataLoader(dataset = db_test, shuffle=True,num_workers=2)
     n_errors = 0
-
-    error_size = 0
-    for i,data in enumerate(test_loader,0):
-            inputs, labels = data
+    i = 0
+    for inputs, labels in test_loader:
             inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(torch.cuda.LongTensor))
             outputs = cnn(inputs)
-            print('Processing file#',i)
+            i=i+1
             print('Outputs=',outputs)
             value,index = torch.max(outputs,1)
-            print('Output: ', value,'-',index, 'Ground truth:', labels)
-            #if (outputs)
-            #print('----------')
-            #error_size = labels - outputs.unsqueeze(0)
-            #print('Error size',torch.abs(error_size))
-            #print('----------')    
+            print('Output:', index, 'Ground truth:', labels)
+            if (index!=labels):
+                n_errors = n_errors+1
+                
             
     print('Total amount of errors:',n_errors)
-    print('Last cycle loss was:', running_loss)
-            
-
+    print('Accuraccy:',n_errors/i-1)
 
 
  
@@ -244,5 +202,3 @@ def main():
 
 if __name__ == "__main__":
    main()
-
-
