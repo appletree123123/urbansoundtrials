@@ -11,10 +11,17 @@ import scipy.io.wavfile as wav
 import warnings
 import torch.optim as optim
 from torchvision import transforms
-import wavio
+import librosa
 from torch.autograd import Variable
 
 from torch.utils.data.sampler import SubsetRandomSampler
+
+def windows(data, window_size):
+    start = 0
+    while start < len(data):
+        yield start, start + window_size
+        start += (window_size / 2)
+
 
 
 class ConvNet(nn.Module):
@@ -76,22 +83,37 @@ class DataSetAir(Dataset):
         for filepath in glob.iglob(class_folder):
             wav_file = filepath + '/' + self.class_list[folder_number] + '.'  + str(file_number+1).zfill(4) + '_.wav'
 
-        label = folder_number  
-        #print(wav_file)
-        #print('File#',file_number,'Folder:',folder_number) #For debug purposes
-        #Feature extraction goes here:
-        wav = wavio.read(wav_file)
-        mfcc_cf = mfcc(wav.data,wav.rate,winlen=0.072,numcep=26,nfft=4000) 
-        d_mfcc = delta(mfcc_cf,2)  #calculate delta mfcc
-        dd_mfcc = delta(d_mfcc,2)
-        sample = np.concatenate((mfcc_cf,d_mfcc),axis=1) #append delta to regular mfcc  
-        sample = np.concatenate((sample,dd_mfcc),axis=1) #delta-delta
-        sample = np.pad(sample, [(0, 800-sample.shape[0]), (0, 0)], 'constant') #All of the samples are different length, append with 0
-        sample = torch.from_numpy(sample)
-        sample = sample / sample.sum(0).expand_as(sample)  #normalize to range of 0:1
-        sample = sample.unsqueeze(0) #Adding an empty axis because we don't work with images and there are no channels
-        return sample, label
 
+        label = folder_number
+        bands = 128
+        frames = 128
+        window_size = 512 * (frames - 1)
+        log_specgrams = []
+        fn = wav_file
+        sound_clip,s = librosa.load(fn)
+        if len(sound_clip)<88200:
+            sound_clip = np.pad(sound_clip,(0,88200-len(sound_clip)),'constant') #Pad with zeroes to the universal length
+        
+        for (start,end) in windows(sound_clip,window_size):
+            s = int(start)
+            e = int(end)
+            if(len(sound_clip[s:e]) == window_size):
+                signal = sound_clip[s:e]
+                melspec = librosa.feature.melspectrogram(signal, n_mels = bands)
+                logspec = librosa.amplitude_to_db(melspec)
+                logspec = logspec.T.flatten()[:, np.newaxis].T
+                log_specgrams.append(logspec)
+        log_specgrams = np.asarray(log_specgrams)
+        log_specgrams = np.asarray(log_specgrams).reshape(len(log_specgrams),bands,frames,1)
+        features = np.concatenate((log_specgrams, np.zeros(np.shape(log_specgrams))), axis = 3)
+        for i in range(len(features)):
+            features[i, :, :, 1] = librosa.feature.delta(features[i, :, :, 0])
+        features = np.array(features)
+        features = np.swapaxes(features,1,3) #channels go first so we need to swap axis 1 and 3
+        sample = torch.from_numpy(features)
+        sample = sample.squeeze(0)
+
+        return sample, label
 
     def __len__(self): #return data length 
 
@@ -116,16 +138,30 @@ class DataSetAir_test(Dataset):
         
         
         label = folder_number
-        wav = wavio.read(wav_file)
-        mfcc_cf = mfcc(wav.data,wav.rate,winlen=0.072,numcep=26,nfft=4000) 
-        d_mfcc = delta(mfcc_cf,2)  #calculate delta mfcc
-        dd_mfcc = delta(d_mfcc,2)
-        sample = np.concatenate((mfcc_cf,d_mfcc),axis=1) #append delta to regular mfcc  
-        sample = np.concatenate((sample,dd_mfcc),axis=1) #delta-delta
-        sample = np.pad(sample, [(0, 800-sample.shape[0]), (0, 0)], 'constant') #All of the samples are different length, append with 0
-        sample = torch.from_numpy(sample)
-        sample = sample / sample.sum(0).expand_as(sample)  #normalize to range of 0:1
-        sample = sample.unsqueeze(0) #Adding an empty axis because we don't work with images and there are no channels
+        bands = 128
+        frames = 128
+        window_size = 512 * (frames - 1)
+        log_specgrams = []
+        fn = wav_file
+        sound_clip,s = librosa.load(fn)
+        if len(sound_clip)<88200:
+            sound_clip = np.pad(sound_clip,(0,88200-len(sound_clip)),'constant') #Pad with zeroes to the universal length      
+        for (start,end) in windows(sound_clip,window_size):
+            s = int(start)
+            e = int(end)
+            if(len(sound_clip[s:e]) == window_size):
+                signal = sound_clip[s:e]
+                melspec = librosa.feature.melspectrogram(signal, n_mels = bands)
+                logspec = librosa.amplitude_to_db(melspec)
+                logspec = logspec.T.flatten()[:, np.newaxis].T
+                log_specgrams.append(logspec)
+        log_specgrams = np.asarray(log_specgrams)
+        log_specgrams = np.asarray(log_specgrams).reshape(len(log_specgrams),bands,frames,1)
+        features = np.concatenate((log_specgrams, np.zeros(np.shape(log_specgrams))), axis = 3)
+        for i in range(len(features)):
+            features[i, :, :, 1] = librosa.feature.delta(features[i, :, :, 0])
+        features = np.array(features)
+        sample = torch.from_numpy(features)
         return sample, label
      
     def __len__(self): #return data length 
@@ -202,3 +238,4 @@ def main():
 
 if __name__ == "__main__":
    main()
+
