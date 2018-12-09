@@ -26,44 +26,43 @@ def windows(data, window_size):
 
 class ConvNet(nn.Module):
 
-
-
+    
     def __init__(self):
         super(ConvNet, self).__init__()
-        self.conv1 = torch.nn.Conv2d(in_channels=1, out_channels=80, kernel_size=2, stride=2, padding=1)
+        self.conv1 = torch.nn.Conv2d(in_channels=2, out_channels=32, kernel_size=3, stride=1, padding=1)
         self.pool1 = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
-        #self.conv12_drop = nn.Dropout2d(0.25)
 
-        self.conv2 = torch.nn.Conv2d(in_channels=80, out_channels=160, kernel_size=3, stride=3, padding=1)
-
+        self.conv2 = torch.nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1)
         self.pool2 = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+        
+        self.conv3 = torch.nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1)
+        self.pool3 = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+        self.conv3_drop = nn.Dropout2d(0.5)
 
-        self.fc1 = torch.nn.Linear(7920*2, 4096)
-        self.fc2 = torch.nn.Linear(4096,2048)
-        self.fc3 = torch.nn.Linear(2048,4)
+
+        self.fc1 = torch.nn.Linear(8192*4, 64)
+        self.fc2 = torch.nn.Linear(64, 1)
         torch.nn.init.xavier_uniform(self.conv1.weight) #initialize weights
         torch.nn.init.xavier_uniform(self.conv2.weight)
-
-
+        torch.nn.init.xavier_uniform(self.conv3.weight)
+      
     def forward(self, x):
-        #print('Begin forward pass, x shape:', x.shape)
         x = F.relu(self.conv1(x.cuda()))
-        #print('First convolution complete, x.shape',x.shape)
         x = self.pool1(x)
-        #print('First pooling complete,x.shape:',x.shape)
+        #print('Conv1 layer: X shape:',x.shape)
         x = F.relu(self.conv2(x.cuda()))
         x = self.pool2(x)
-
-        x = x.view(x.size(0),-1) 
-        #print('Shape after rectifying',x.shape)
+        #print('Conv2 layer: X shape:',x.shape)        
+        x = F.relu(self.conv3(x.cuda()))
+        x = self.pool3(x)
+        #print('Conv3 layer: X shape:',x.shape)    
+        x = F.dropout(x, training=self.training)
+        x = x.view(x.size(0),-1)   #Rectify 
         x = F.relu(self.fc1(x))
-        #print('Shape after fc1',x.shape)
-        x = F.relu(self.fc2(x))
-        #print('Shape after fc2',x.shape)
-        x = self.fc3(x)
-        #print('Before softmax',x.shape)
-    
-        return F.softmax(x)
+        x = self.fc2(x)
+
+        return F.sigmoid(x)
+
 
 
 
@@ -73,7 +72,7 @@ class DataSetAir(Dataset):
     def __init__(self, root_dir,transform): #download,read,transform the data
         self.root_dir = root_dir
         #self.class_list = ('air_conditioner','children_playing','dog_bark','drilling','engine_idling','jackhammer','siren','street_music')
-        self.class_list = ('air_conditioner','children_playing','jackhammer','street_music')
+        self.class_list = ('air_conditioner','children_playing')
         self.transform = transform
 
     def __getitem__(self, index): 
@@ -112,12 +111,11 @@ class DataSetAir(Dataset):
         features = np.swapaxes(features,1,3) #channels go first so we need to swap axis 1 and 3
         sample = torch.from_numpy(features)
         sample = sample.squeeze(0)
-
         return sample, label
 
     def __len__(self): #return data length 
 
-        return 890*len(self.class_list) #899
+        return 800*len(self.class_list) #899
 
 
 class DataSetAir_test(Dataset):
@@ -126,7 +124,7 @@ class DataSetAir_test(Dataset):
     def __init__(self, root_dir,transform): #download,read,transform the data
         self.root_dir = root_dir
         #self.class_list = ('air_conditioner','children_playing','dog_bark','drilling','engine_idling','jackhammer','siren','street_music')
-        self.class_list = ('air_conditioner','children_playing','jackhammer','street_music')
+        self.class_list = ('air_conditioner','children_playing')
         self.transform = transform
 
     def __getitem__(self, index):
@@ -161,7 +159,10 @@ class DataSetAir_test(Dataset):
         for i in range(len(features)):
             features[i, :, :, 1] = librosa.feature.delta(features[i, :, :, 0])
         features = np.array(features)
+        features = np.swapaxes(features,1,3) #channels go first so we need to swap axis 1 and 3
         sample = torch.from_numpy(features)
+        sample = sample.squeeze(0)
+
         return sample, label
      
     def __len__(self): #return data length 
@@ -180,31 +181,29 @@ def main():
     train_transformer = transforms.ToTensor()  
 
     db = DataSetAir('audio',train_transformer) #initiate DataBase
-    train_loader = DataLoader(dataset = db, batch_size =64, shuffle=True, num_workers=2)
+    train_loader = DataLoader(dataset = db, batch_size =32, shuffle=True, num_workers=2)
 
     cnn = ConvNet() #Create the instanse of net 
     cnn = cnn.cuda()
 
 
-    criterion = torch.nn.CrossEntropyLoss().cuda() #tried Cross Entropy Loss
-    #optimizer = optim.Adam(cnn.parameters(), lr=0.001) #Optimizer with learning rate 0.001
-    optimizer = optim.SGD(cnn.parameters(), lr = 0.01, momentum=0.9)
-    running_loss = 0 
-    total_train_loss = 0
+    criterion = torch.nn.BCELoss().cuda() #tried Cross Entropy Loss
+    optimizer = optim.Adam(cnn.parameters(), lr=0.001) #Optimizer with learning rate 0.001
+    #optimizer = optim.SGD(cnn.parameters(), lr = 0.01, momentum=0.9)
+    running_loss = 0
     for epoch in range(32):  #32 it was
         running_loss = 0
         for inputs, labels in train_loader:
-            inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(torch.cuda.LongTensor))
+            inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(dtype))
             optimizer.zero_grad()             #Set the parameter gradients to zero
             outputs = cnn(inputs)
-            loss_size = criterion(outputs, labels) 
-            loss_size.backward()
-            optimizer.step()   
-            running_loss += loss_size.data[0]
+            loss = criterion(outputs, labels)
+            #print('loss_size',loss)
+            loss.backward()
+            optimizer.step()
+            running_loss += loss.data[0]
         print('Running loss was:',running_loss)
         print('Finishing Epoch #',epoch)
-        total_train_loss += loss_size.data[0]
-         
 
 
     #Moving to testing:
@@ -219,7 +218,7 @@ def main():
             inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(torch.cuda.LongTensor))
             outputs = cnn(inputs)
             i=i+1
-            print('Outputs=',outputs)
+            #print('Outputs=',outputs)
             value,index = torch.max(outputs,1)
             print('Output:', index, 'Ground truth:', labels)
             if (index!=labels):
@@ -227,7 +226,7 @@ def main():
                 
             
     print('Total amount of errors:',n_errors)
-    print('Accuraccy:',n_errors/i-1)
+    print('Accuraccy:',1-n_errors/i)
 
 
  
@@ -238,4 +237,3 @@ def main():
 
 if __name__ == "__main__":
    main()
-
