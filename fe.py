@@ -23,13 +23,20 @@ def extract_features():
     window_size = 512 * (frames - 1)
     log_specgrams = []
     fn = 'test.wav'
-    sound_clip,s = librosa.load(fn)
+    clip,s = librosa.load(fn)
+    sound_clip = clip
+    if len(sound_clip)<88200:
+        sound_clip = np.pad(sound_clip,(0,88200-len(sound_clip)),'constant') #Pad with zeroes to the universal length
+    print('Len:',len(sound_clip))
+    print('sound_clip',sound_clip,'with shape',sound_clip.shape,'s',s)
+
     for (start,end) in windows(sound_clip,window_size):
        print('start:',int(start),'end',int(end))
        s = int(start)
        e = int(end)
        if(len(sound_clip[s:e]) == window_size):
            signal = sound_clip[s:e]
+           print(signal)
            melspec = librosa.feature.melspectrogram(signal, n_mels = bands)
            logspec = librosa.amplitude_to_db(melspec)
            logspec = logspec.T.flatten()[:, np.newaxis].T
@@ -48,6 +55,7 @@ def extract_features():
 def main():
    print('Start:')
    features = extract_features()
+   #print(features,'with shape')
    print(features.shape)
 
 
