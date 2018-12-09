@@ -191,7 +191,7 @@ def main():
     optimizer = optim.Adam(cnn.parameters(), lr=0.001) #Optimizer with learning rate 0.001
     #optimizer = optim.SGD(cnn.parameters(), lr = 0.01, momentum=0.9)
     running_loss = 0
-    for epoch in range(32):  #32 it was
+    for epoch in range(18):  #32 it was
         running_loss = 0
         for inputs, labels in train_loader:
             inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(dtype))
@@ -215,13 +215,13 @@ def main():
     n_errors = 0
     i = 0
     for inputs, labels in test_loader:
-            inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(torch.cuda.LongTensor))
+            inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(dtype))
             outputs = cnn(inputs)
             i=i+1
             #print('Outputs=',outputs)
             value,index = torch.max(outputs,1)
-            print('Output:', index, 'Ground truth:', labels)
-            if (index!=labels):
+            print('Output:', outputs, 'Ground truth:', labels)
+            if torch.abs(outputs-labels)>0.45:
                 n_errors = n_errors+1
                 
             
