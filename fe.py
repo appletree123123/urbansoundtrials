@@ -14,15 +14,12 @@ def windows(data, window_size):
         start += (window_size / 2)
 
 
-def extract_features():
-    #bands = 60
-    #frames = 41
-    #window_size = 512 * (frames - 1)
+def extract_features(fn='test.wav'):
+
     bands = 128
     frames = 128
     window_size = 512 * (frames - 1)
     log_specgrams = []
-    fn = 'test.wav'
     clip,s = librosa.load(fn)
     sound_clip = clip
     if len(sound_clip)<88200:
@@ -51,16 +48,4 @@ def extract_features():
 
 
 
-
-def main():
-   print('Start:')
-   features = extract_features()
-   #print(features,'with shape')
-   print(features.shape)
-
-
-
-
-if __name__ == "__main__":
-   main()
 
