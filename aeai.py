@@ -72,7 +72,7 @@ class DataSetAir(Dataset):
     def __init__(self, root_dir,transform): #download,read,transform the data
         self.root_dir = root_dir
         #self.class_list = ('air_conditioner','children_playing','dog_bark','drilling','engine_idling','jackhammer','siren','street_music')
-        self.class_list = ('air_conditioner','children_playing')
+        self.class_list = ('dog_bark','engine_idling')
         self.transform = transform
 
     def __getitem__(self, index): 
@@ -118,56 +118,6 @@ class DataSetAir(Dataset):
         return 800*len(self.class_list) #899
 
 
-class DataSetAir_test(Dataset):
-    #Test set
-    
-    def __init__(self, root_dir,transform): #download,read,transform the data
-        self.root_dir = root_dir
-        #self.class_list = ('air_conditioner','children_playing','dog_bark','drilling','engine_idling','jackhammer','siren','street_music')
-        self.class_list = ('air_conditioner','children_playing')
-        self.transform = transform
-
-    def __getitem__(self, index):
-        file_number = int(index / len(self.class_list))
-        folder_number = index % len(self.class_list)
-        class_folder = os.path.join(self.root_dir, self.class_list[folder_number])
-        for filepath in glob.iglob(class_folder):
-            wav_file = filepath + '/' + self.class_list[folder_number] + '.' +  str(file_number+1).zfill(4) + '_.wav'
-        
-        
-        label = folder_number
-        bands = 128
-        frames = 128
-        window_size = 512 * (frames - 1)
-        log_specgrams = []
-        fn = wav_file
-        sound_clip,s = librosa.load(fn)
-        if len(sound_clip)<88200:
-            sound_clip = np.pad(sound_clip,(0,88200-len(sound_clip)),'constant') #Pad with zeroes to the universal length      
-        for (start,end) in windows(sound_clip,window_size):
-            s = int(start)
-            e = int(end)
-            if(len(sound_clip[s:e]) == window_size):
-                signal = sound_clip[s:e]
-                melspec = librosa.feature.melspectrogram(signal, n_mels = bands)
-                logspec = librosa.amplitude_to_db(melspec)
-                logspec = logspec.T.flatten()[:, np.newaxis].T
-                log_specgrams.append(logspec)
-        log_specgrams = np.asarray(log_specgrams)
-        log_specgrams = np.asarray(log_specgrams).reshape(len(log_specgrams),bands,frames,1)
-        features = np.concatenate((log_specgrams, np.zeros(np.shape(log_specgrams))), axis = 3)
-        for i in range(len(features)):
-            features[i, :, :, 1] = librosa.feature.delta(features[i, :, :, 0])
-        features = np.array(features)
-        features = np.swapaxes(features,1,3) #channels go first so we need to swap axis 1 and 3
-        sample = torch.from_numpy(features)
-        sample = sample.squeeze(0)
-
-        return sample, label
-     
-    def __len__(self): #return data length 
-
-        return 92
 
 
 def main():
@@ -191,7 +141,7 @@ def main():
     optimizer = optim.Adam(cnn.parameters(), lr=0.001) #Optimizer with learning rate 0.001
     #optimizer = optim.SGD(cnn.parameters(), lr = 0.01, momentum=0.9)
     running_loss = 0
-    for epoch in range(18):  #32 it was
+    for epoch in range(18):  #18 it was
         running_loss = 0
         for inputs, labels in train_loader:
             inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(dtype))
@@ -206,31 +156,13 @@ def main():
         print('Finishing Epoch #',epoch)
 
 
-    #Moving to testing:
-    #running_loss = 0
-    cnn.eval()
-    torch.save(cnn, 'aeai.pt')
-    db_test = DataSetAir_test('test', train_transformer)
-    test_loader = DataLoader(dataset = db_test, shuffle=True,num_workers=2)
-    n_errors = 0
-    i = 0
-    for inputs, labels in test_loader:
-            inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(dtype))
-            outputs = cnn(inputs)
-            i=i+1
-            #print('Outputs=',outputs)
-            value,index = torch.max(outputs,1)
-            print('Output:', outputs, 'Ground truth:', labels)
-            if torch.abs(outputs-labels)>0.45:
-                n_errors = n_errors+1
-                
-            
-    print('Total amount of errors:',n_errors)
-    print('Accuraccy:',1-n_errors/i)
 
 
  
-    print('Done.')
+    print('Finished training.')
+    torch.save(cnn, 'aeai_full.pt')
+    torch.save(cnn.state_dict(), 'aeai.pt')
+    print('Saving model..')
 
 
 
