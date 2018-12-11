@@ -16,6 +16,8 @@ from torch.autograd import Variable
 
 from torch.utils.data.sampler import SubsetRandomSampler
 
+from fe import extract_features
+
 def windows(data, window_size):
     start = 0
     while start < len(data):
@@ -75,38 +77,9 @@ class DataSetAir_test(Dataset):
         class_folder = os.path.join(self.root_dir, self.class_list[folder_number])
         for filepath in glob.iglob(class_folder):
             wav_file = filepath + '/' + self.class_list[folder_number] + '.' +  str(file_number+1).zfill(4) + '_.wav'
-        
-        
+
         label = folder_number
-        
-        bands = 128
-        frames = 128
-        window_size = 512 * (frames - 1)
-        log_specgrams = []
-        fn = wav_file
-        sound_clip,s = librosa.load(fn)
-        if len(sound_clip)<88200:
-            sound_clip = np.pad(sound_clip,(0,88200-len(sound_clip)),'constant') #Pad with zeroes to the universal length
-        
-        for (start,end) in windows(sound_clip,window_size):
-            s = int(start)
-            e = int(end)
-            if(len(sound_clip[s:e]) == window_size):
-                signal = sound_clip[s:e]
-                melspec = librosa.feature.melspectrogram(signal, n_mels = bands)
-                logspec = librosa.amplitude_to_db(melspec)
-                logspec = logspec.T.flatten()[:, np.newaxis].T
-                log_specgrams.append(logspec)
-        log_specgrams = np.asarray(log_specgrams)
-        log_specgrams = np.asarray(log_specgrams).reshape(len(log_specgrams),bands,frames,1)
-        features = np.concatenate((log_specgrams, np.zeros(np.shape(log_specgrams))), axis = 3)
-        for i in range(len(features)):
-            features[i, :, :, 1] = librosa.feature.delta(features[i, :, :, 0])
-        features = np.array(features)
-        features = np.swapaxes(features,1,3) #channels go first so we need to swap axis 1 and 3
-        sample = torch.from_numpy(features)
-        sample = sample.squeeze(0)
-        
+        sample = extract_features(wav_file)
         return sample, label
 
      
@@ -116,8 +89,9 @@ class DataSetAir_test(Dataset):
 
 
 def main():
+
     warnings.filterwarnings("ignore")  #not to dlood the output
-    torch.set_printoptions(precision=10)   #to get a nice output
+    torch.set_printoptions(precision=4)   #to get a nice output
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu') #working on cuda, not on the CPU
 
     dtype=torch.cuda.FloatTensor
@@ -150,6 +124,7 @@ def main():
             
     print('Total amount of errors:',n_errors)
     print('Accuraccy:',100*(1-n_errors/i),'%')
+    
 
  
     print('Done.')
