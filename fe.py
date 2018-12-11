@@ -15,7 +15,7 @@ def windows(data, window_size):
 
 
 def extract_features(fn='test.wav'):
-
+#Takes a wav file and returns a 2x128x128 tensor ready for uploading into AI
     bands = 128
     frames = 128
     window_size = 512 * (frames - 1)
@@ -44,7 +44,8 @@ def extract_features(fn='test.wav'):
     for i in range(len(features)):
         features[i, :, :, 1] = librosa.feature.delta(features[i, :, :, 0])
 
-    return np.array(features)
+    features = np.array(features)
+    return torch.from_numpy(features)
 
 
 
