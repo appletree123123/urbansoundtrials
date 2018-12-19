@@ -13,8 +13,8 @@ import torch.optim as optim
 from torchvision import transforms
 import librosa
 from torch.autograd import Variable
-
 from torch.utils.data.sampler import SubsetRandomSampler
+from beautifultable import BeautifulTable
 
 from fe import extract_features
 
@@ -43,7 +43,7 @@ class ConvNet(nn.Module):
 
 
         self.fc1 = torch.nn.Linear(8192*4, 64)
-        self.fc2 = torch.nn.Linear(64, 1)
+        self.fc2 = torch.nn.Linear(64, 4)
         
     def forward(self, x):
         x = F.relu(self.conv1(x.cuda()))
@@ -60,7 +60,7 @@ class ConvNet(nn.Module):
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
 
-        return F.sigmoid(x)
+        return F.softmax(x)
 
 class DataSetAir_test(Dataset):
     #Test set
@@ -68,7 +68,7 @@ class DataSetAir_test(Dataset):
     def __init__(self, root_dir,transform): #download,read,transform the data
         self.root_dir = root_dir
         #self.class_list = ('air_conditioner','children_playing','dog_bark','drilling','engine_idling','jackhammer','siren','street_music')
-        self.class_list = ('dog_bark','engine_idling')
+        self.class_list = ('dog_bark','engine_idling','children_playing','siren')
         self.transform = transform
 
     def __getitem__(self, index):
@@ -85,7 +85,7 @@ class DataSetAir_test(Dataset):
      
     def __len__(self): #return data length 
 
-        return 92*len(self.class_list)
+        return 83*len(self.class_list)
 
 
 def main():
@@ -102,7 +102,7 @@ def main():
     cnn = ConvNet() #Create the instanse of net 
     cnn = cnn.cuda()
 
-    
+    class_list = ('dog_bark','engine_idling','children_playing','siren')
     print('Loading model...')
     
     cnn.load_state_dict(torch.load('aeai.pt'))
@@ -112,21 +112,22 @@ def main():
     test_loader = DataLoader(dataset = db_test, shuffle=True,num_workers=2)
     n_errors = 0
     i = 0
+    output_table = BeautifulTable()
+    output_table.column_headers = ["N","Guessed class","Probability","Real class"]
     for inputs, labels in test_loader:
-            inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(dtype))
+            inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(torch.cuda.LongTensor))
             outputs = cnn(inputs)
             i=i+1
             value,index = torch.max(outputs,1)
-            print('N',i,'Output:', outputs, 'Ground truth:', labels)
-            if torch.abs(outputs-labels)>0.45:
-                n_errors = n_errors+1
-                
-            
+            output_table.append_row([i, class_list[index], value.data.cpu().numpy()[0], class_list[labels.data.cpu().numpy()[0]]])
+            #print('N',i,'Got class:   ', class_list[index], 'Real class:   ', class_list[labels.data.cpu().numpy()[0]])
+            if (index!=labels):
+                n_errors=n_errors+1
+                #print('Found error in class',class_list[labels.data.cpu().numpy()[0]])
+    print(output_table)
     print('Total amount of errors:',n_errors)
     print('Accuraccy:',100*(1-n_errors/i),'%')
-    
 
- 
     print('Done.')
 
 
