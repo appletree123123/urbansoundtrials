@@ -19,7 +19,6 @@ from fe import extract_features
 
 
 
-
 class ConvNet(nn.Module):
 
     
@@ -37,7 +36,7 @@ class ConvNet(nn.Module):
 
 
         self.fc1 = torch.nn.Linear(8192*4, 64)
-        self.fc2 = torch.nn.Linear(64, 1)
+        self.fc2 = torch.nn.Linear(64, 4)
         torch.nn.init.xavier_uniform(self.conv1.weight) #initialize weights
         torch.nn.init.xavier_uniform(self.conv2.weight)
         torch.nn.init.xavier_uniform(self.conv3.weight)
@@ -57,7 +56,8 @@ class ConvNet(nn.Module):
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
 
-        return F.sigmoid(x)
+        return F.softmax(x)
+
 
 
 
@@ -68,7 +68,7 @@ class DataSetAir(Dataset):
     def __init__(self, root_dir,transform): #download,read,transform the data
         self.root_dir = root_dir
         #self.class_list = ('air_conditioner','children_playing','dog_bark','drilling','engine_idling','jackhammer','siren','street_music')
-        self.class_list = ('dog_bark','engine_idling')
+        self.class_list = ('dog_bark','engine_idling','children_playing','siren')
         self.transform = transform
 
     def __getitem__(self, index): 
@@ -91,7 +91,7 @@ class DataSetAir(Dataset):
 
 def main():
 
-    warnings.filterwarnings("ignore")  #not to dlood the output
+    warnings.filterwarnings("ignore")  #not to flood the output
     torch.set_printoptions(precision=10)   #to get a nice output
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu') #working on cuda, not on the CPU
 
@@ -100,22 +100,22 @@ def main():
     train_transformer = transforms.ToTensor()  
 
     db = DataSetAir('audio',train_transformer) #initiate DataBase
-    train_loader = DataLoader(dataset = db, batch_size =32, shuffle=True, num_workers=2)
+    train_loader = DataLoader(dataset = db, batch_size =32, shuffle=True, num_workers=2) #put 32
 
     cnn = ConvNet() #Create the instanse of net 
     cnn = cnn.cuda()
 
 
-    criterion = torch.nn.BCELoss().cuda() #tried Cross Entropy Loss
-    optimizer = optim.Adam(cnn.parameters(), lr=0.001) #Optimizer with learning rate 0.001
-    #optimizer = optim.SGD(cnn.parameters(), lr = 0.01, momentum=0.9)
+    criterion = torch.nn.CrossEntropyLoss().cuda() 
+    optimizer = optim.SGD(cnn.parameters(), lr = 0.001, momentum=0.9)
     running_loss = 0
-    for epoch in range(18):  #18 it was
+    for epoch in range(52):
         running_loss = 0
         for inputs, labels in train_loader:
-            inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(dtype))
+            inputs, labels = Variable(inputs.type(dtype)), Variable(labels.type(torch.cuda.LongTensor))
             optimizer.zero_grad()             #Set the parameter gradients to zero
             outputs = cnn(inputs)
+            #print('Output:',outputs,'with labels',labels)
             loss = criterion(outputs, labels)
             #print('loss_size',loss)
             loss.backward()
