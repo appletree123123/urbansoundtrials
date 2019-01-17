@@ -12,14 +12,22 @@ from collections import deque
 from dash.dependencies import Input, Output, State
 import dash_table
 
-
-
 X = deque(maxlen=20)
 X.append(1)
 Y = deque(maxlen=20)
 Y.append(1)
 
-app = dash.Dash(__name__)
+
+app = dash.Dash('UrbanSound8k')
+external_css = ["https://codepen.io/chriddyp/pen/bWLwgP.css"]
+#external_css = ["https://codepen.io/ainalem/pen/QzogPe.css"]
+for css in external_css:
+    app.css.append_css({"external_url": css})
+#External JavaScript
+external_js = ["https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/js/materialize.min.js"]
+for js in external_js:
+    app.scripts.append_script({"external_url": js})
+
 app.layout = html.Div(
     [
         html.H3('A.C.E Control Panel'),
@@ -34,20 +42,14 @@ app.layout = html.Div(
             dcc.Tab(label='Sector 8', value='tab-8-example'),
 
     ]),
-        dcc.Graph(id='live-graph', animate=True),
+        dcc.Graph(id='live-graph', animate=True, style={'height': '300px'}),
         dcc.Interval(
             id='graph-update',
             interval=1*1000
         ),
         html.H5('Live alerts:'),
-        dcc.Textarea(
-            placeholder='Enter a value...',
-            value='NO ALERTS',
-            style={
-                   'width': '100%',
-                   'height' : '80px'
-                  }
-        ),
+        html.Div(id='alerts-output',
+             children='No alerts'),
         html.H6('Drag and drop test samples:'),
         dcc.Upload(
             id='upload-data',
@@ -97,9 +99,9 @@ def parse_contents(content, filename):
     f=open("res", "r")
     if f.mode == 'r':
         contents =f.read()
-    os.system('rm res')
+    #os.system('rm res')
     os.system('rm *.wav')
-
+    print('==================contents',contents)
     return html.Div([
         (contents),
         ])
@@ -123,37 +125,22 @@ def update_graph_scatter():
 
     return {'data': [data],'layout' : go.Layout(xaxis=dict(range=[min(X),max(X)]),
                                                 yaxis=dict(range=[-1,1]),)}
- 
 
 
 
-@app.callback(Output('upload-data', 'children'),
+
+@app.callback(Output('alerts-output', 'children'),
               [Input('upload-data', 'contents')],
               [State('upload-data', 'filename'),
                State('upload-data', 'last_modified')])
 def update_output(list_of_contents, list_of_names, list_of_dates):
+
     if list_of_contents is not None:
         children = [
             parse_contents(list_of_contents,list_of_names)]
-        
         return children
 
 
-
-
-
-
-
-#external_css = ["https://codepen.io/chriddyp/pen/dZVMbK.css"] 
-external_css = ["https://cdnjs.cloudflare.com/ajax/libs/toast-css/1.1.0/grid.min.css"]
-#external_css = ["https://cdn.polyfill.io/v2/polyfill.min.js"] WPL CSS
-
-for css in external_css:
-    app.css.append_css({"external_url": css})
-
-external_js = ['https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/js/materialize.min.js']
-for js in external_css:
-    app.scripts.append_script({'external_url': js})
 
 
 
